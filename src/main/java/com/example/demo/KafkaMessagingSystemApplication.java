@@ -4,6 +4,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.tomcat.util.json.JSONParser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -24,9 +25,15 @@ public class KafkaMessagingSystemApplication {
 		ConfigurableApplicationContext context = SpringApplication.run(KafkaMessagingSystemApplication.class, args);
 		MessageProducer producer = context.getBean(MessageProducer.class);
 		MessageListener listener = context.getBean(MessageListener.class);
+		//JSONParser parser = new JSONParser("EventJsonFile.json");
+		
 		
 		producer.sendMessage("Hello, World!");
 		listener.latch.await(10, TimeUnit.SECONDS);
+		
+		producer.sendEventMessage(new Events("UCL", "FIFA", "12:30:00", "Biggest European Event in the field of Football"));
+		listener.eventLatch.await(10, TimeUnit.SECONDS);
+		
 		context.close();
 	}
 	
@@ -45,8 +52,14 @@ public class KafkaMessagingSystemApplication {
 		@Autowired
 		private KafkaTemplate<String, String> kafkaTemplate;
 		
-		@Value(value = "${message.topic.name}")
+		@Autowired
+        private KafkaTemplate<String, Events> eventKafkaTemplate;
+		
+		@Value(value = "${message.topic.name}")		
 		private String topicName;
+		
+		@Value(value = "${event.topic.name}")
+		private String eventTopicName;
 		
 		public void sendMessage(String message) {
 			ListenableFuture<SendResult<String, String>> future = kafkaTemplate.send(topicName, message);
@@ -67,15 +80,27 @@ public class KafkaMessagingSystemApplication {
 				
 			});
 		}
+
+		public void sendEventMessage(Events event) {
+			eventKafkaTemplate.send(eventTopicName, event);
+		}
 	}
 	
 	public static class MessageListener{
 		private CountDownLatch latch = new CountDownLatch(2);
+		private CountDownLatch eventLatch = new CountDownLatch(1);
 		
 		@KafkaListener(topics = "${message.topic.name}", groupId = "test", containerFactory = "kafkaListenerContainerFactory")
 		public void listen(String message) {
 		    System.out.println("Received Messasge in group test: " + message);
 		}
+		
+		@KafkaListener(topics = "${event.topic.name}", containerFactory = "eventKafkaListenerContainerFactory")
+        public void greetingListener(Events greeting) {
+			
+            System.out.println("Recieved greeting message: " + greeting);
+            this.eventLatch.countDown();
+}
 	}
 }
 
