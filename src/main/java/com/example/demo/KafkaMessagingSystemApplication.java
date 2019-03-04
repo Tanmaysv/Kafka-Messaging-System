@@ -1,13 +1,19 @@
 package com.example.demo;
 
+import java.io.File;
+import java.io.FileReader;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.tomcat.util.json.JSONParser;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
+//import org.apache.tomcat.util.json.JSONParser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
+
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -17,16 +23,18 @@ import org.springframework.kafka.support.SendResult;
 import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.util.concurrent.ListenableFutureCallback;
 
+import javax.ws.rs.client.Client;
+import javax.ws.rs.client.ClientBuilder;
+import javax.ws.rs.client.WebTarget;
+import javax.ws.rs.core.MediaType;
 
 @SpringBootApplication
 public class KafkaMessagingSystemApplication {
-
+	
 	public static void main(String[] args) throws InterruptedException {
 		ConfigurableApplicationContext context = SpringApplication.run(KafkaMessagingSystemApplication.class, args);
 		MessageProducer producer = context.getBean(MessageProducer.class);
 		MessageListener listener = context.getBean(MessageListener.class);
-		//JSONParser parser = new JSONParser("EventJsonFile.json");
-		
 		
 		producer.sendMessage("Hello, World!");
 		listener.latch.await(10, TimeUnit.SECONDS);
@@ -45,6 +53,11 @@ public class KafkaMessagingSystemApplication {
     @Bean
     public MessageListener messageListener() {
         return new MessageListener();
+    }
+    
+    @Bean
+    public JsonFileParser jsonFileParser() {
+    	return new JsonFileParser();
     }
 
 	public static class MessageProducer {
@@ -88,7 +101,8 @@ public class KafkaMessagingSystemApplication {
 	
 	public static class MessageListener{
 		private CountDownLatch latch = new CountDownLatch(2);
-		private CountDownLatch eventLatch = new CountDownLatch(1);
+		private CountDownLatch eventLatch = new CountDownLatch(1);		
+		JsonFileParser jsonFileParser = new JsonFileParser();
 		
 		@KafkaListener(topics = "${message.topic.name}", groupId = "test", containerFactory = "kafkaListenerContainerFactory")
 		public void listen(String message) {
@@ -96,11 +110,20 @@ public class KafkaMessagingSystemApplication {
 		}
 		
 		@KafkaListener(topics = "${event.topic.name}", containerFactory = "eventKafkaListenerContainerFactory")
-        public void greetingListener(Events greeting) {
-			
-            System.out.println("Recieved greeting message: " + greeting);
+        public void eventListener(Events event) {
+            System.out.println("Recieved event message: " + event);
             this.eventLatch.countDown();
-}
+            JSONObject jsonObject = jsonFileParser.jsonParser();
+            System.out.println("The name of the event is: " + jsonObject.get("name"));
+            System.out.println("The source of the event is: " + jsonObject.get("source"));
+            
+            Client client = ClientBuilder.newClient();
+    		WebTarget target = client.target("https://jsonplaceholder.typicode.com/todos/1");
+    		System.out.println("..................testing.....................");
+    		System.out.println(target.request(MediaType.APPLICATION_JSON).get(String.class));
+		}
+		
+		
 	}
 }
 

@@ -45,7 +45,7 @@ public class KafkaProducerConfiguration {
 	    }
 	    
 	    @Bean
-	    public KafkaTemplate<String, Events> greetingKafkaTemplate() {
+	    public KafkaTemplate<String, Events> eventKafkaTemplate() {
 	        return new KafkaTemplate<>(eventProducingFactory());
 	}
 }
